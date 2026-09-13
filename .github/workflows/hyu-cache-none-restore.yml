@@ -1,0 +1,17 @@
+name: Hyu cache none restore
+on:
+  push:
+    paths:
+      - .hyu-cachemode-none-restore-trigger
+cache-mode: none
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/hyu-raw-cache
+        with:
+          operation: restore-v2
+          key: hyu-r1-positive-v2
+          version: "1111111111111111111111111111111111111111111111111111111111111111"
+          expected-hash: b38db5c1bae8ecac11a054da9bb93e215e627a0e54eb20f9b46ec9261ace8643
