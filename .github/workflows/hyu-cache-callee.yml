@@ -1,0 +1,9 @@
+name: Hyu cache callee
+on:
+  workflow_call:
+cache-mode: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "callee_started=true"
