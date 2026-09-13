@@ -1,0 +1,49 @@
+name: Hyu cache explicit mode H1
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  read_official:
+    if: github.event.comment.body == 'hyu-cachemode-r1'
+    runs-on: ubuntu-latest
+    cache-mode: read
+    steps:
+      - run: printf %s HYU-R1-20260913-A > marker.txt
+      - uses: actions/cache/save@v4
+        with:
+          path: marker.txt
+          key: hyu-r1-read-official-v1
+  read_raw:
+    needs: read_official
+    runs-on: ubuntu-latest
+    cache-mode: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/hyu-raw-cache
+        with:
+          operation: save
+          key: hyu-r1-read-raw-v1
+          version: 1111111111111111111111111111111111111111111111111111111111111111
+          marker: HYU-R1-20260913-A
+  none_official:
+    needs: read_raw
+    runs-on: ubuntu-latest
+    cache-mode: none
+    steps:
+      - run: printf %s HYU-R1-20260913-A > marker.txt
+      - uses: actions/cache/save@v4
+        with:
+          path: marker.txt
+          key: hyu-r1-none-official-v1
+  none_raw:
+    needs: none_official
+    runs-on: ubuntu-latest
+    cache-mode: none
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/hyu-raw-cache
+        with:
+          operation: save
+          key: hyu-r1-none-raw-v1
+          version: 1111111111111111111111111111111111111111111111111111111111111111
+          marker: HYU-R1-20260913-A
