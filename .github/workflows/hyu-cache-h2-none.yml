@@ -1,0 +1,9 @@
+name: Hyu cache nested cap none
+on:
+  push:
+    paths:
+      - .hyu-cachemode-h2-none-trigger
+cache-mode: none
+jobs:
+  call:
+    uses: ./.github/workflows/hyu-cache-callee.yml
