@@ -1,0 +1,9 @@
+name: Hyu cache nested cap read
+on:
+  push:
+    paths:
+      - .hyu-cachemode-h2-read-trigger
+cache-mode: read
+jobs:
+  call:
+    uses: ./.github/workflows/hyu-cache-callee.yml
