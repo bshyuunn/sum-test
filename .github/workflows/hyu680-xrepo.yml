@@ -1,0 +1,135 @@
+name: HYU-680 cross-repository read boundary
+on:
+  push:
+    paths:
+      - ".github/workflows/hyu680-xrepo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    env:
+      TOKEN_SECRET: ${{ secrets.GITHUB_TOKEN }}
+      TOKEN_CONTEXT: ${{ github.token }}
+      EXPECT_TARGET_LEN: "72"
+      EXPECT_TARGET_SHA256: "bfb84f3bec211b3c6f36815c8fc006e9d452472eb842b034563d1724ef9c227d"
+      EXPECT_CALLER_LEN: "103"
+      EXPECT_CALLER_SHA256: "e7a44f05b7fd9ef84bb52622f0592c5f6fab0e75c55e89522bbbf1fec1e0a066"
+      TARGET_BLOB_SHA: "52f7eb2a680c6d97c0a2be7dd6fe246c3df05e60"
+      TARGET_REPOSITORY_NODE_ID: "R_kgDOMZeC6w"
+    steps:
+      - name: Execute bounded authorization matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          API="https://api.github.com"
+          ACCEPT="application/vnd.github+json"
+          VERSION="2022-11-28"
+
+          if [[ "$TOKEN_SECRET" == "$TOKEN_CONTEXT" ]]; then
+            echo "token_sources_equal=true"
+          else
+            echo "token_sources_equal=false"
+            exit 91
+          fi
+          echo "job_repository=${GITHUB_REPOSITORY}"
+          echo "job_repository_id=${GITHUB_REPOSITORY_ID}"
+          echo "job_permissions_declared=contents_read_metadata_implicit"
+          echo "extra_credentials_present=false"
+
+          report_bytes() {
+            local label="$1" path="$2" expected_len="$3" expected_sha="$4"
+            local actual_len actual_sha
+            actual_len="$(wc -c < "$path" | tr -d ' ')"
+            actual_sha="$(sha256sum "$path" | cut -d' ' -f1)"
+            echo "${label}_decoded=true"
+            echo "${label}_length=${actual_len}"
+            echo "${label}_sha256=${actual_sha}"
+            if [[ "$actual_len" == "$expected_len" && "$actual_sha" == "$expected_sha" ]]; then
+              echo "${label}_exact_match=true"
+            else
+              echo "${label}_exact_match=false"
+              echo "${label}_unexpected_body=true"
+              exit 90
+            fi
+          }
+
+          rest_get() {
+            local label="$1" url="$2" expected_len="$3" expected_sha="$4"
+            local status
+            status="$(curl -sS -o "${label}.json" -w '%{http_code}' \
+              -H "Accept: ${ACCEPT}" \
+              -H "Authorization: Bearer ${TOKEN_CONTEXT}" \
+              -H "X-GitHub-Api-Version: ${VERSION}" \
+              "$url")"
+            echo "${label}_status=${status}"
+            if [[ "$status" == "200" ]]; then
+              if [[ "$(jq -r '.content | type' "${label}.json" 2>/dev/null || true)" == "string" ]]; then
+                jq -r '.content' "${label}.json" | tr -d '\n' | base64 --decode > "${label}.bin"
+                report_bytes "$label" "${label}.bin" "$expected_len" "$expected_sha"
+              else
+                echo "${label}_decoded=false"
+                echo "${label}_unexpected_body=true"
+                exit 90
+              fi
+            else
+              echo "${label}_decoded=false"
+            fi
+          }
+
+          graphql_named() {
+            local label="graphql_named"
+            jq -n --arg owner "bshyuunn" --arg name "test-b" --arg expr "HEAD:hyu680-sentinel.txt" \
+              '{query:"query($owner:String!,$name:String!,$expr:String!){repository(owner:$owner,name:$name){id object(expression:$expr){__typename ... on Blob{id oid byteSize text}}}}",variables:{owner:$owner,name:$name,expr:$expr}}' > "${label}.request.json"
+            local status
+            status="$(curl -sS -o "${label}.json" -w '%{http_code}' \
+              -H "Accept: ${ACCEPT}" \
+              -H "Authorization: Bearer ${TOKEN_CONTEXT}" \
+              -H "X-GitHub-Api-Version: ${VERSION}" \
+              -H "Content-Type: application/json" \
+              --data @"${label}.request.json" "${API}/graphql")"
+            echo "${label}_status=${status}"
+            echo "${label}_errors_count=$(jq -r '(.errors // []) | length' "${label}.json" 2>/dev/null || echo parse_error)"
+            echo "${label}_repository_null=$(jq -r '.data.repository == null' "${label}.json" 2>/dev/null || echo parse_error)"
+            echo "${label}_object_null=$(jq -r '.data.repository.object == null' "${label}.json" 2>/dev/null || echo parse_error)"
+            if [[ "$(jq -r '.data.repository.object.text | type' "${label}.json" 2>/dev/null || true)" == "string" ]]; then
+              jq -j '.data.repository.object.text' "${label}.json" > "${label}.bin"
+              report_bytes "$label" "${label}.bin" "$EXPECT_TARGET_LEN" "$EXPECT_TARGET_SHA256"
+            else
+              echo "${label}_decoded=false"
+            fi
+          }
+
+          graphql_node() {
+            local label="graphql_node"
+            jq -n --arg id "$TARGET_REPOSITORY_NODE_ID" --arg expr "HEAD:hyu680-sentinel.txt" \
+              '{query:"query($id:ID!,$expr:String!){node(id:$id){__typename ... on Repository{id object(expression:$expr){__typename ... on Blob{id oid byteSize text}}}}}",variables:{id:$id,expr:$expr}}' > "${label}.request.json"
+            local status
+            status="$(curl -sS -o "${label}.json" -w '%{http_code}' \
+              -H "Accept: ${ACCEPT}" \
+              -H "Authorization: Bearer ${TOKEN_CONTEXT}" \
+              -H "X-GitHub-Api-Version: ${VERSION}" \
+              -H "Content-Type: application/json" \
+              --data @"${label}.request.json" "${API}/graphql")"
+            echo "${label}_status=${status}"
+            echo "${label}_errors_count=$(jq -r '(.errors // []) | length' "${label}.json" 2>/dev/null || echo parse_error)"
+            echo "${label}_node_null=$(jq -r '.data.node == null' "${label}.json" 2>/dev/null || echo parse_error)"
+            echo "${label}_object_null=$(jq -r '.data.node.object == null' "${label}.json" 2>/dev/null || echo parse_error)"
+            if [[ "$(jq -r '.data.node.object.text | type' "${label}.json" 2>/dev/null || true)" == "string" ]]; then
+              jq -j '.data.node.object.text' "${label}.json" > "${label}.bin"
+              report_bytes "$label" "${label}.bin" "$EXPECT_TARGET_LEN" "$EXPECT_TARGET_SHA256"
+            else
+              echo "${label}_decoded=false"
+            fi
+          }
+
+          rest_get "caller_control" "${API}/repos/bshyuunn/sum-test/contents/main.cpp" "$EXPECT_CALLER_LEN" "$EXPECT_CALLER_SHA256"
+          rest_get "target_contents" "${API}/repos/bshyuunn/test-b/contents/hyu680-sentinel.txt" "$EXPECT_TARGET_LEN" "$EXPECT_TARGET_SHA256"
+          rest_get "target_blob" "${API}/repos/bshyuunn/test-b/git/blobs/${TARGET_BLOB_SHA}" "$EXPECT_TARGET_LEN" "$EXPECT_TARGET_SHA256"
+          graphql_named
+          graphql_node
+          echo "matrix_complete=true"
