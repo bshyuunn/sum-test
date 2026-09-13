@@ -1,4 +1,4 @@
-name: HYU693 Round 4 caller probe
+name: HYU693 Round 4 caller control
 on:
   push:
     paths:
@@ -6,114 +6,41 @@ on:
 permissions:
   actions: read
 jobs:
-  control:
-    name: caller-control
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create and log caller marker
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s' 'HYU693C_4f182b7d0a6e49b3af37c0519dce8264' > hyu693-r4-caller-marker.txt
-          printf 'caller_log_marker=%s\n' 'HYU693C_4f182b7d0a6e49b3af37c0519dce8264'
-      - name: Upload caller marker
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: hyu693-r4-caller-artifact
-          path: hyu693-r4-caller-marker.txt
-          if-no-files-found: error
-          retention-days: 1
   probe:
-    name: caller-probe
-    needs: control
+    name: caller-control-probe
     runs-on: ubuntu-latest
     env:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TOKEN_CONTEXT: ${{ github.token }}
       API: https://api.github.com
-      TARGET_RUN: '34776798439'
-      TARGET_JOB: '103776277475'
-      TARGET_ARTIFACT: '10323927007'
-      TARGET_HASH: bd6a6a03fd1027b821a88893cf843db5dcb861338983f302ce3a781b5ca04424
+      CONTROL_RUN: '34777143923'
+      CONTROL_JOB: '103777217268'
+      CONTROL_ARTIFACT: '10324166927'
       CALLER_HASH: 32108f044b84b3c321d6ead925336d174e84cda908257576ce27bbb4e1cea8c6
     steps:
-      - name: Execute bounded authorization matrix
+      - name: Verify current-repository artifact and log
         shell: bash
         run: |
           set -euo pipefail
-          work="$RUNNER_TEMP/hyu693-r4"
+          work="$RUNNER_TEMP/hyu693-r4-control"
           mkdir -p "$work"
           auth_args=(
             -H "Authorization: Bearer ${TOKEN}"
             -H "Accept: application/vnd.github+json"
             -H "X-GitHub-Api-Version: 2022-11-28"
           )
-          anon_args=(
-            -H "Accept: application/vnd.github+json"
-            -H "X-GitHub-Api-Version: 2022-11-28"
-          )
 
           request_json() {
-            local label="$1" mode="$2" url="$3" out="$4"
-            local status
-            if [ "$mode" = auth ]; then
-              status=$(curl -sS --max-redirs 0 -o "$out" -w '%{http_code}' "${auth_args[@]}" "$url")
-            else
-              status=$(curl -sS --max-redirs 0 -o "$out" -w '%{http_code}' "${anon_args[@]}" "$url")
-            fi
+            local label="$1" url="$2" out="$3" status
+            status=$(curl -sS --max-redirs 0 -o "$out" -w '%{http_code}' "${auth_args[@]}" "$url")
             printf '%s_status=%s\n' "$label" "$status"
-            printf '%s' "$status"
-          }
-
-          analyze_artifact() {
-            local label="$1" archive="$2" expected_hash="$3" expected_file="$4"
-            local entry_count name_match observed_hash marker_match
-            entry_count=$(unzip -Z1 "$archive" 2>/dev/null | wc -l | tr -d ' ')
-            name_match=false
-            if [ "$entry_count" = 1 ] && unzip -Z1 "$archive" 2>/dev/null | grep -Fxq "$expected_file"; then
-              name_match=true
-            fi
-            observed_hash=$(unzip -p "$archive" "$expected_file" 2>/dev/null | sha256sum | cut -d' ' -f1)
-            marker_match=false
-            if [ "$observed_hash" = "$expected_hash" ]; then marker_match=true; fi
-            printf '%s_final_size=%s\n' "$label" "$(wc -c < "$archive" | tr -d ' ')"
-            printf '%s_entry_count=%s\n' "$label" "$entry_count"
-            printf '%s_name_match=%s\n' "$label" "$name_match"
-            printf '%s_marker_sha256=%s\n' "$label" "$observed_hash"
-            printf '%s_marker_match=%s\n' "$label" "$marker_match"
-          }
-
-          analyze_log() {
-            local label="$1" log_file="$2" expected_hash="$3" prefix="$4" zipped="$5"
-            local marker_file="$work/${label}.markers" marker_count marker_match observed_hash marker
-            if [ "$zipped" = true ]; then
-              (unzip -p "$log_file" 2>/dev/null || true) | grep -aoE "${prefix}_[a-f0-9]{32}" | sort -u > "$marker_file" || true
-            else
-              grep -aoE "${prefix}_[a-f0-9]{32}" "$log_file" | sort -u > "$marker_file" || true
-            fi
-            marker_count=$(wc -l < "$marker_file" | tr -d ' ')
-            marker_match=false
-            observed_hash=none
-            while IFS= read -r marker; do
-              [ -n "$marker" ] || continue
-              observed_hash=$(printf '%s' "$marker" | sha256sum | cut -d' ' -f1)
-              if [ "$observed_hash" = "$expected_hash" ]; then marker_match=true; break; fi
-            done < "$marker_file"
-            printf '%s_final_size=%s\n' "$label" "$(wc -c < "$log_file" | tr -d ' ')"
-            printf '%s_marker_count=%s\n' "$label" "$marker_count"
-            printf '%s_marker_sha256=%s\n' "$label" "$observed_hash"
-            printf '%s_marker_match=%s\n' "$label" "$marker_match"
           }
 
           request_download() {
-            local label="$1" mode="$2" url="$3" kind="$4" expected_hash="$5" expected_file="$6" prefix="$7"
-            local headers="$work/${label}.headers" first="$work/${label}.first" final="$work/${label}.final"
-            local status location final_status location_present=false
-            if [ "$mode" = auth ]; then
-              status=$(curl -sS --max-redirs 0 -D "$headers" -o "$first" -w '%{http_code}' "${auth_args[@]}" "$url")
-            else
-              status=$(curl -sS --max-redirs 0 -D "$headers" -o "$first" -w '%{http_code}' "${anon_args[@]}" "$url")
-            fi
+            local label="$1" url="$2" kind="$3" expected_hash="$4" expected_file="$5" prefix="$6"
+            local headers="$work/${label}.headers" first="$work/${label}.first" final="$work/${label}.final" markers="$work/${label}.markers"
+            local status location final_status location_present=false observed_hash=none marker_match=false marker_count=0 entry_count=0 name_match=false marker
+            status=$(curl -sS --max-redirs 0 -D "$headers" -o "$first" -w '%{http_code}' "${auth_args[@]}" "$url")
             location=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' "$headers")
             if [ -n "$location" ]; then location_present=true; fi
             printf '%s_api_status=%s\n' "$label" "$status"
@@ -126,20 +53,33 @@ jobs:
             else
               printf '%s_final_status=none\n' "$label"
               printf '%s_marker_match=false\n' "$label"
-              return 0
+              return
             fi
             printf '%s_final_status=%s\n' "$label" "$final_status"
             if [ "$final_status" != 200 ]; then
               printf '%s_marker_match=false\n' "$label"
-              return 0
+              return
             fi
             if [ "$kind" = artifact ]; then
-              analyze_artifact "$label" "$final" "$expected_hash" "$expected_file"
-            elif [ "$kind" = runlog ]; then
-              analyze_log "$label" "$final" "$expected_hash" "$prefix" true
+              entry_count=$(unzip -Z1 "$final" 2>/dev/null | wc -l | tr -d ' ')
+              if [ "$entry_count" = 1 ] && unzip -Z1 "$final" 2>/dev/null | grep -Fxq "$expected_file"; then name_match=true; fi
+              observed_hash=$(unzip -p "$final" "$expected_file" 2>/dev/null | sha256sum | cut -d' ' -f1)
+              if [ "$observed_hash" = "$expected_hash" ]; then marker_match=true; fi
+              printf '%s_entry_count=%s\n' "$label" "$entry_count"
+              printf '%s_name_match=%s\n' "$label" "$name_match"
             else
-              analyze_log "$label" "$final" "$expected_hash" "$prefix" false
+              grep -aoE "${prefix}_[a-f0-9]{32}" "$final" | sort -u > "$markers" || true
+              marker_count=$(wc -l < "$markers" | tr -d ' ')
+              while IFS= read -r marker; do
+                [ -n "$marker" ] || continue
+                observed_hash=$(printf '%s' "$marker" | sha256sum | cut -d' ' -f1)
+                if [ "$observed_hash" = "$expected_hash" ]; then marker_match=true; break; fi
+              done < "$markers"
+              printf '%s_marker_count=%s\n' "$label" "$marker_count"
             fi
+            printf '%s_final_size=%s\n' "$label" "$(wc -c < "$final" | tr -d ' ')"
+            printf '%s_marker_sha256=%s\n' "$label" "$observed_hash"
+            printf '%s_marker_match=%s\n' "$label" "$marker_match"
           }
 
           token_equals_context=false
@@ -147,49 +87,10 @@ jobs:
           printf 'job_repository=%s\n' "$GITHUB_REPOSITORY"
           printf 'job_repository_id=%s\n' "$GITHUB_REPOSITORY_ID"
           printf 'token_equals_github_context=%s\n' "$token_equals_context"
-          printf 'target_repository_id=832013035\n'
+          printf 'caller_control_run_id=%s\n' "$CONTROL_RUN"
+          printf 'caller_control_job_id=%s\n' "$CONTROL_JOB"
+          printf 'caller_control_artifact_id=%s\n' "$CONTROL_ARTIFACT"
 
-          caller_artifacts="$work/caller-artifacts.json"
-          caller_artifacts_status=$(request_json caller_list auth "$API/repos/bshyuunn/sum-test/actions/runs/$GITHUB_RUN_ID/artifacts" "$caller_artifacts")
-          caller_artifact_id=none
-          if [ "$caller_artifacts_status" = 200 ]; then
-            caller_artifact_id=$(jq -r '.artifacts[] | select(.name=="hyu693-r4-caller-artifact") | .id' "$caller_artifacts" | head -n1)
-            [ -n "$caller_artifact_id" ] || caller_artifact_id=none
-          fi
-          printf 'caller_artifact_id=%s\n' "$caller_artifact_id"
-
-          caller_jobs="$work/caller-jobs.json"
-          caller_jobs_status=$(request_json caller_jobs auth "$API/repos/bshyuunn/sum-test/actions/runs/$GITHUB_RUN_ID/jobs" "$caller_jobs")
-          caller_job_id=none
-          if [ "$caller_jobs_status" = 200 ]; then
-            caller_job_id=$(jq -r '.jobs[] | select(.name=="caller-control") | .id' "$caller_jobs" | head -n1)
-            [ -n "$caller_job_id" ] || caller_job_id=none
-          fi
-          printf 'caller_control_job_id=%s\n' "$caller_job_id"
-
-          if [ "$caller_artifact_id" != none ]; then
-            request_json caller_artifact_metadata auth "$API/repos/bshyuunn/sum-test/actions/artifacts/$caller_artifact_id" "$work/caller-meta.json" >/dev/null
-            request_download caller_artifact auth "$API/repos/bshyuunn/sum-test/actions/artifacts/$caller_artifact_id/zip" artifact "$CALLER_HASH" hyu693-r4-caller-marker.txt HYU693C
-          else
-            printf 'caller_artifact_control_missing=true\n'
-          fi
-          if [ "$caller_job_id" != none ]; then
-            request_download caller_job_log auth "$API/repos/bshyuunn/sum-test/actions/jobs/$caller_job_id/logs" joblog "$CALLER_HASH" unused HYU693C
-          else
-            printf 'caller_log_control_missing=true\n'
-          fi
-
-          request_download unauth_target_artifact anon "$API/repos/bshyuunn/test-b/actions/artifacts/$TARGET_ARTIFACT/zip" artifact "$TARGET_HASH" hyu693-r4-target-marker.txt HYU693T
-          request_download unauth_target_job_log anon "$API/repos/bshyuunn/test-b/actions/jobs/$TARGET_JOB/logs" joblog "$TARGET_HASH" unused HYU693T
-
-          request_json h1_target_run_artifacts auth "$API/repos/bshyuunn/test-b/actions/runs/$TARGET_RUN/artifacts" "$work/h1-list.json" >/dev/null
-          request_json h1_target_artifact_metadata auth "$API/repos/bshyuunn/test-b/actions/artifacts/$TARGET_ARTIFACT" "$work/h1-meta.json" >/dev/null
-          request_download h1_target_artifact auth "$API/repos/bshyuunn/test-b/actions/artifacts/$TARGET_ARTIFACT/zip" artifact "$TARGET_HASH" hyu693-r4-target-marker.txt HYU693T
-          request_download h1_target_job_log auth "$API/repos/bshyuunn/test-b/actions/jobs/$TARGET_JOB/logs" joblog "$TARGET_HASH" unused HYU693T
-          request_download h1_target_run_log auth "$API/repos/bshyuunn/test-b/actions/runs/$TARGET_RUN/logs" runlog "$TARGET_HASH" unused HYU693T
-
-          request_json h2_caller_route_target_run_artifacts auth "$API/repos/bshyuunn/sum-test/actions/runs/$TARGET_RUN/artifacts" "$work/h2-list.json" >/dev/null
-          request_json h2_caller_route_target_artifact_metadata auth "$API/repos/bshyuunn/sum-test/actions/artifacts/$TARGET_ARTIFACT" "$work/h2-meta.json" >/dev/null
-          request_download h2_caller_route_target_artifact auth "$API/repos/bshyuunn/sum-test/actions/artifacts/$TARGET_ARTIFACT/zip" artifact "$TARGET_HASH" hyu693-r4-target-marker.txt HYU693T
-          request_download h2_caller_route_target_job_log auth "$API/repos/bshyuunn/sum-test/actions/jobs/$TARGET_JOB/logs" joblog "$TARGET_HASH" unused HYU693T
-          request_download h2_caller_route_target_run_log auth "$API/repos/bshyuunn/sum-test/actions/runs/$TARGET_RUN/logs" runlog "$TARGET_HASH" unused HYU693T
+          request_json caller_artifact_metadata "$API/repos/bshyuunn/sum-test/actions/artifacts/$CONTROL_ARTIFACT" "$work/metadata.json"
+          request_download caller_artifact "$API/repos/bshyuunn/sum-test/actions/artifacts/$CONTROL_ARTIFACT/zip" artifact "$CALLER_HASH" hyu693-r4-caller-marker.txt HYU693C
+          request_download caller_job_log "$API/repos/bshyuunn/sum-test/actions/jobs/$CONTROL_JOB/logs" joblog "$CALLER_HASH" unused HYU693C
