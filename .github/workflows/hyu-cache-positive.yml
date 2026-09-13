@@ -1,0 +1,17 @@
+name: Hyu cache positive control
+on:
+  push:
+    paths:
+      - .hyu-cachemode-positive-trigger
+cache-mode: write
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/hyu-raw-cache
+        with:
+          operation: save
+          key: hyu-r1-positive-v1
+          version: 1111111111111111111111111111111111111111111111111111111111111111
+          marker: HYU-R1-20260913-A
