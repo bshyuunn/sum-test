@@ -1,0 +1,9 @@
+name: Hyu cache nested cap write control
+on:
+  push:
+    paths:
+      - .hyu-cachemode-h2-write-trigger
+cache-mode: write
+jobs:
+  call:
+    uses: ./.github/workflows/hyu-cache-callee.yml
