@@ -12,21 +12,21 @@ jobs:
       - name: Restore positive control
         uses: ./.github/actions/hyu-raw-cache
         with:
-          operation: restore
-          key: hyu-r1-positive-v1
+          operation: restore-v2
+          key: hyu-r1-positive-v2
           version: "1111111111111111111111111111111111111111111111111111111111111111"
           expected-hash: b38db5c1bae8ecac11a054da9bb93e215e627a0e54eb20f9b46ec9261ace8643
       - name: Restore explicit read probe
         uses: ./.github/actions/hyu-raw-cache
         with:
-          operation: restore
-          key: hyu-r1-read-raw-v1
+          operation: restore-v2
+          key: hyu-r1-read-raw-v2
           version: "1111111111111111111111111111111111111111111111111111111111111111"
           expected-hash: b38db5c1bae8ecac11a054da9bb93e215e627a0e54eb20f9b46ec9261ace8643
       - name: Restore explicit none probe
         uses: ./.github/actions/hyu-raw-cache
         with:
-          operation: restore
-          key: hyu-r1-none-raw-v1
+          operation: restore-v2
+          key: hyu-r1-none-raw-v2
           version: "1111111111111111111111111111111111111111111111111111111111111111"
           expected-hash: b38db5c1bae8ecac11a054da9bb93e215e627a0e54eb20f9b46ec9261ace8643
