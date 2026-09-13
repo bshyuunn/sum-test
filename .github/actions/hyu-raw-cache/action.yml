@@ -1,0 +1,18 @@
+name: Hyu raw cache probe
+description: Minimal v1 cache protocol probe without logging credentials
+inputs:
+  operation:
+    required: true
+  key:
+    required: true
+  version:
+    required: true
+  marker:
+    required: false
+    default: ""
+  expected-hash:
+    required: false
+    default: ""
+runs:
+  using: node24
+  main: index.js
